@@ -14,7 +14,8 @@ BRIDGE = Path(__file__).with_name("core_context.py")
 
 
 class CoreContextTests(unittest.TestCase):
-    def inspect(self, failure=None, connection="core", symbols=None, architecture="x86_64-little-endian"):
+    def inspect(self, failure=None, connection="core", symbols=None, architecture="x86_64-little-endian",
+                objfile="recorded-executable"):
         commands, reads, queries = [], [], []
         state = {"executable": None, "symbols": None, "connection": None}
         gdb = types.ModuleType("gdb")
@@ -50,7 +51,7 @@ class CoreContextTests(unittest.TestCase):
         def maps():
             self.assertIsNone(state["executable"], "Helper executable must be discarded before mapping queries")
             queries.append("maps")
-            return [types.SimpleNamespace(start=4096, end=8192, offset=0, flags=5, objfile="recorded-executable")]
+            return [types.SimpleNamespace(start=4096, end=8192, offset=0, flags=5, objfile=objfile)]
 
         pwndbg.aglib.vmmap.get = maps
         modules = {module.__name__: module for module in [
@@ -111,6 +112,15 @@ class CoreContextTests(unittest.TestCase):
                 self.assertFalse(result["ok"])
                 self.assertEqual(reads, [])
                 self.assertEqual(queries, [])
+
+    def test_oversized_complete_context_is_refused_with_its_budget(self):
+        result, _, _, queries = self.inspect(objfile="/" + "a" * (64 * 1024 * 1024))
+        self.assertEqual(queries, ["maps"])
+        self.assertEqual(result, {
+            "ok": False,
+            "reason": "output-limit",
+            "message": "Complete debugger context exceeds the 64 MiB reply budget.",
+        })
 
 
 if __name__ == "__main__":
